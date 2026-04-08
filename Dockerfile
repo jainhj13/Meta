@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir huggingface-hub httpx pydantic
 # Copy application code
 COPY workplace_ai_env/ /app/workplace_ai_env/
 COPY server/ /app/server/
+COPY app.py /app/app.py
 COPY inference.py /app/inference.py
 COPY pyproject.toml /app/pyproject.toml
 COPY models.py /app/models.py
