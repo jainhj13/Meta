@@ -1,18 +1,42 @@
+# Python cache and compiled files
 __pycache__/
 *.py[cod]
 *$py.class
-.git
-.gitignore
-.env
-.venv/
-venv/
+*.so
 *.egg-info/
 dist/
 build/
+*.egg
+
+# Version control and git
+.git
+.gitignore
+
+# Environment variables (never baked into image)
+.env
+.env.example
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE and OS files
 .vscode/
 .idea/
-*.md
-!README.md
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Runtime outputs (rebuild on each container)
 workplace_ai_env/outputs/
 outputs/
+
+# Test outputs
 tests/
+.pytest_cache/
+.coverage
+
+# Note: We keep *.md files (especially README.md) for documentation
+# Note: We keep __init__.py and all .py files for the application to function

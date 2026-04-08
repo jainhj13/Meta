@@ -11,11 +11,11 @@ Exposes the environment over HTTP endpoints compatible with OpenEnv:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from workplace_ai_env.models import WorkplaceAction, WorkplaceObservation, WorkplaceState
 from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
@@ -24,22 +24,25 @@ from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
 # ---- Request / Response Models ----
 
 class ResetRequest(BaseModel):
-    task_name: str = "email_triage"
-    seed: int = 0
-    episode_id: str | None = None
+    """Request model for environment reset endpoint."""
+    task_name: str = Field(default="email_triage", description="Task name: email_triage, meeting_scheduler, or workflow_executor")
+    seed: int = Field(default=0, description="Random seed for scenario generation")
+    episode_id: Optional[str] = Field(default=None, description="Optional custom episode identifier")
 
 
 class StepRequest(BaseModel):
-    task_name: str
-    action_type: str
-    payload: dict[str, Any] = {}
+    """Request model for environment step endpoint."""
+    task_name: str = Field(..., description="Task name")
+    action_type: str = Field(..., description="Action type for this step")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Action payload")
 
 
 class StepResponse(BaseModel):
-    observation: dict[str, Any]
-    reward: float
-    done: bool
-    info: dict[str, Any] = {}
+    """Response model for environment step endpoint."""
+    observation: dict[str, Any] = Field(..., description="Next observation")
+    reward: float = Field(..., description="Reward for this step")
+    done: bool = Field(..., description="Whether episode is done")
+    info: dict[str, Any] = Field(default_factory=dict, description="Additional info")
 
 
 class HealthResponse(BaseModel):
