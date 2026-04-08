@@ -10,6 +10,7 @@ Exposes the environment over HTTP endpoints compatible with OpenEnv:
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -135,23 +136,43 @@ def mcp():
     }
 
 
+async def _parse_request_body(request: Request) -> dict[str, Any]:
+    """Parse incoming request payload flexibly for OpenEnv compatibility."""
+    body: Any = {}
+    try:
+        body = await request.json()
+    except Exception:
+        try:
+            form = await request.form()
+            body = dict(form)
+        except Exception:
+            raw = await request.body()
+            if raw:
+                try:
+                    body = json.loads(raw.decode("utf-8"))
+                except Exception:
+                    body = {}
+
+    if isinstance(body, dict):
+        if "input" in body and isinstance(body["input"], dict):
+            body = body["input"]
+        elif "data" in body and isinstance(body["data"], dict):
+            body = body["data"]
+    else:
+        body = {}
+
+    return body
+
+
 @app.post("/reset")
 async def reset(request: Request):
     """Reset - no validation, pure request handling"""
     try:
-        body = {}
-        try:
-            body = await request.json()
-        except:
-            pass
-        
-        if not isinstance(body, dict):
-            body = {}
-        
+        body = await _parse_request_body(request)
         task_name = body.get("task_name") or "email_triage"
         seed = int(body.get("seed", 0))
         episode_id = body.get("episode_id")
-        
+
         observation = env.reset(
             task_name=str(task_name),
             seed=seed,
@@ -168,15 +189,7 @@ async def reset(request: Request):
 async def step(request_obj: Request):
     """Step - no validation, pure request handling"""
     try:
-        body = {}
-        try:
-            body = await request_obj.json()
-        except:
-            pass
-        
-        if not isinstance(body, dict):
-            body = {}
-        
+        body = await _parse_request_body(request_obj)
         action = WorkplaceAction(
             task_name=str(body.get("task_name", "")),
             action_type=str(body.get("action_type", "")),
