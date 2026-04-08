@@ -14,4 +14,4 @@ else
 fi
 echo "[Startup] Starting FastAPI server..."
 
-exec uvicorn workplace_ai_env.server.app:app --host 0.0.0.0 --port 8000
+exec uvicorn server.app:app --host 0.0.0.0 --port 8000
