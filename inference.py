@@ -41,14 +41,22 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-infer
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 ENV_SERVER_URL = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
 
-# Validate token
+# Check if this is validation mode (Docker/CI environment without token)
+VALIDATION_MODE = os.getenv("VALIDATION_MODE", "false").lower() == "true"
+
+# Validate token (skip in validation mode)
 if not HF_TOKEN or HF_TOKEN == "hf_your_token_here":
-    print("ERROR: HF_TOKEN not set. Please configure your .env file.", file=sys.stderr)
-    print("Steps:", file=sys.stderr)
-    print("  1. Go to https://huggingface.co/settings/tokens", file=sys.stderr)
-    print("  2. Create a token with 'Read' permission", file=sys.stderr)
-    print("  3. Add it to your .env file: HF_TOKEN=hf_...", file=sys.stderr)
-    sys.exit(1)
+    if not VALIDATION_MODE:
+        print("ERROR: HF_TOKEN not set. Please configure your .env file.", file=sys.stderr)
+        print("Steps:", file=sys.stderr)
+        print("  1. Go to https://huggingface.co/settings/tokens", file=sys.stderr)
+        print("  2. Create a token with 'Read' permission", file=sys.stderr)
+        print("  3. Add it to your .env file: HF_TOKEN=hf_...", file=sys.stderr)
+        print("  4. Or set VALIDATION_MODE=true for Docker testing", file=sys.stderr)
+        sys.exit(1)
+    else:
+        print("[INFO] VALIDATION_MODE enabled: Using placeholder token", file=sys.stderr)
+        HF_TOKEN = "hf_placeholder_validation_token"
 
 
 def create_llm_client() -> InferenceClient:

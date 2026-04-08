@@ -11,11 +11,12 @@ Exposes the environment over HTTP endpoints compatible with OpenEnv:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 from workplace_ai_env.models import WorkplaceAction, WorkplaceObservation, WorkplaceState
 from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
@@ -24,22 +25,31 @@ from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
 # ---- Request / Response Models ----
 
 class ResetRequest(BaseModel):
-    task_name: str = "email_triage"
-    seed: int = 0
-    episode_id: str | None = None
+    """Request model for environment reset endpoint."""
+    model_config = ConfigDict(populate_by_name=True, extra='allow')
+    
+    task_name: str = Field(default="email_triage", description="Task name")
+    seed: int = Field(default=0, description="Random seed")
+    episode_id: Optional[str] = Field(default=None, description="Optional episode ID")
 
 
 class StepRequest(BaseModel):
-    task_name: str
-    action_type: str
-    payload: dict[str, Any] = {}
+    """Request model for environment step endpoint."""
+    model_config = ConfigDict(populate_by_name=True, extra='allow')
+    
+    task_name: str = Field(default="", description="Task name")
+    action_type: str = Field(default="", description="Action type")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Action payload")
 
 
 class StepResponse(BaseModel):
-    observation: dict[str, Any]
-    reward: float
-    done: bool
-    info: dict[str, Any] = {}
+    """Response model for environment step endpoint."""
+    model_config = ConfigDict(populate_by_name=True)
+    
+    observation: dict[str, Any] = Field(..., description="Next observation")
+    reward: float = Field(..., description="Reward for this step")
+    done: bool = Field(..., description="Whether episode is done")
+    info: dict[str, Any] = Field(default_factory=dict, description="Additional info")
 
 
 class HealthResponse(BaseModel):
@@ -126,55 +136,63 @@ def mcp():
 
 
 @app.post("/reset")
-async def reset(request: ResetRequest) -> dict:
-    """
-    Reset the environment and start a new episode.
-
-    Args:
-        request: ResetRequest with task_name, seed, and optional episode_id
-
-    Returns:
-        Initial observation
-    """
+async def reset(request: Request):
+    """Reset - no validation, pure request handling"""
     try:
+        body = {}
+        try:
+            body = await request.json()
+        except:
+            pass
+        
+        if not isinstance(body, dict):
+            body = {}
+        
+        task_name = body.get("task_name") or "email_triage"
+        seed = int(body.get("seed", 0))
+        episode_id = body.get("episode_id")
+        
         observation = env.reset(
-            task_name=request.task_name,
-            seed=request.seed,
-            episode_id=request.episode_id,
+            task_name=str(task_name),
+            seed=seed,
+            episode_id=str(episode_id) if episode_id else None,
         )
-        return observation.model_dump()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        result = observation.model_dump()
+        return JSONResponse(content=result, status_code=200)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+        import traceback
+        return JSONResponse(content={"error": str(e), "traceback": traceback.format_exc()}, status_code=500)
 
 
-@app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest) -> StepResponse:
-    """
-    Execute one step in the environment.
-
-    Args:
-        request: StepRequest with task_name, action_type, and payload
-
-    Returns:
-        StepResponse with observation, reward, done, and info
-    """
+@app.post("/step")
+async def step(request_obj: Request):
+    """Step - no validation, pure request handling"""
     try:
+        body = {}
+        try:
+            body = await request_obj.json()
+        except:
+            pass
+        
+        if not isinstance(body, dict):
+            body = {}
+        
         action = WorkplaceAction(
-            task_name=request.task_name,
-            action_type=request.action_type,
-            payload=request.payload,
+            task_name=str(body.get("task_name", "")),
+            action_type=str(body.get("action_type", "")),
+            payload=dict(body.get("payload", {})),
         )
         result = env.step(action)
-        return StepResponse(
-            observation=result.observation.model_dump(),
-            reward=result.reward,
-            done=result.done,
-            info=result.info,
-        )
+        response = {
+            "observation": result.observation.model_dump(),
+            "reward": result.reward,
+            "done": result.done,
+            "info": result.info,
+        }
+        return JSONResponse(content=response, status_code=200)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Step failed: {str(e)}")
+        import traceback
+        return JSONResponse(content={"error": str(e), "traceback": traceback.format_exc()}, status_code=500)
 
 
 @app.get("/state")
