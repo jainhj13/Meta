@@ -13,9 +13,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from workplace_ai_env.models import WorkplaceAction, WorkplaceObservation, WorkplaceState
 from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
@@ -25,20 +25,26 @@ from workplace_ai_env.server.workplace_environment import WorkplaceEnvironment
 
 class ResetRequest(BaseModel):
     """Request model for environment reset endpoint."""
-    task_name: str = Field(default="email_triage", description="Task name: email_triage, meeting_scheduler, or workflow_executor")
-    seed: int = Field(default=0, description="Random seed for scenario generation")
-    episode_id: Optional[str] = Field(default=None, description="Optional custom episode identifier")
+    model_config = ConfigDict(populate_by_name=True, extra='allow')
+    
+    task_name: str = Field(default="email_triage", description="Task name")
+    seed: int = Field(default=0, description="Random seed")
+    episode_id: Optional[str] = Field(default=None, description="Optional episode ID")
 
 
 class StepRequest(BaseModel):
     """Request model for environment step endpoint."""
-    task_name: str = Field(..., description="Task name")
-    action_type: str = Field(..., description="Action type for this step")
+    model_config = ConfigDict(populate_by_name=True, extra='allow')
+    
+    task_name: str = Field(default="", description="Task name")
+    action_type: str = Field(default="", description="Action type")
     payload: dict[str, Any] = Field(default_factory=dict, description="Action payload")
 
 
 class StepResponse(BaseModel):
     """Response model for environment step endpoint."""
+    model_config = ConfigDict(populate_by_name=True)
+    
     observation: dict[str, Any] = Field(..., description="Next observation")
     reward: float = Field(..., description="Reward for this step")
     done: bool = Field(..., description="Whether episode is done")
@@ -129,21 +135,25 @@ def mcp():
 
 
 @app.post("/reset")
-async def reset(request: ResetRequest = Body(...)) -> dict:
+async def reset(request: Request) -> dict:
     """
     Reset the environment and start a new episode.
-
-    Args:
-        request: ResetRequest with task_name, seed, and optional episode_id
-
-    Returns:
-        Initial observation
+    Accepts JSON body with optional: task_name, seed, episode_id
+    Returns: Initial observation
     """
     try:
+        body = await request.json()
+        if body is None or not isinstance(body, dict):
+            body = {}
+        
+        task_name = body.get("task_name", "email_triage")
+        seed = body.get("seed", 0)
+        episode_id = body.get("episode_id", None)
+        
         observation = env.reset(
-            task_name=request.task_name,
-            seed=request.seed,
-            episode_id=request.episode_id,
+            task_name=str(task_name),
+            seed=int(seed) if seed is not None else 0,
+            episode_id=str(episode_id) if episode_id is not None else None,
         )
         return observation.model_dump()
     except ValueError as e:
@@ -153,29 +163,29 @@ async def reset(request: ResetRequest = Body(...)) -> dict:
 
 
 @app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest = Body(...)) -> StepResponse:
+async def step(request_obj: Request):
     """
     Execute one step in the environment.
-
-    Args:
-        request: StepRequest with task_name, action_type, and payload
-
-    Returns:
-        StepResponse with observation, reward, done, and info
+    Accepts JSON body with: task_name, action_type, payload
+    Returns: StepResponse with observation, reward, done, and info
     """
     try:
+        body = await request_obj.json()
+        if body is None or not isinstance(body, dict):
+            body = {}
+        
         action = WorkplaceAction(
-            task_name=request.task_name,
-            action_type=request.action_type,
-            payload=request.payload,
+            task_name=body.get("task_name", ""),
+            action_type=body.get("action_type", ""),
+            payload=body.get("payload", {}),
         )
         result = env.step(action)
-        return StepResponse(
-            observation=result.observation.model_dump(),
-            reward=result.reward,
-            done=result.done,
-            info=result.info,
-        )
+        return {
+            "observation": result.observation.model_dump(),
+            "reward": result.reward,
+            "done": result.done,
+            "info": result.info,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Step failed: {str(e)}")
 
