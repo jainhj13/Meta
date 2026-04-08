@@ -13,7 +13,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -129,7 +129,7 @@ def mcp():
 
 
 @app.post("/reset")
-async def reset(request: ResetRequest) -> dict:
+async def reset(request: ResetRequest = Body(...)) -> dict:
     """
     Reset the environment and start a new episode.
 
@@ -153,7 +153,7 @@ async def reset(request: ResetRequest) -> dict:
 
 
 @app.post("/step", response_model=StepResponse)
-async def step(request: StepRequest) -> StepResponse:
+async def step(request: StepRequest = Body(...)) -> StepResponse:
     """
     Execute one step in the environment.
 
