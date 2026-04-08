@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -135,59 +136,63 @@ def mcp():
 
 
 @app.post("/reset")
-async def reset(request: Request) -> dict:
-    """
-    Reset the environment and start a new episode.
-    Accepts JSON body with optional: task_name, seed, episode_id
-    Returns: Initial observation
-    """
+async def reset(request: Request):
+    """Reset - no validation, pure request handling"""
     try:
-        body = await request.json()
-        if body is None or not isinstance(body, dict):
+        body = {}
+        try:
+            body = await request.json()
+        except:
+            pass
+        
+        if not isinstance(body, dict):
             body = {}
         
-        task_name = body.get("task_name", "email_triage")
-        seed = body.get("seed", 0)
-        episode_id = body.get("episode_id", None)
+        task_name = body.get("task_name") or "email_triage"
+        seed = int(body.get("seed", 0))
+        episode_id = body.get("episode_id")
         
         observation = env.reset(
             task_name=str(task_name),
-            seed=int(seed) if seed is not None else 0,
-            episode_id=str(episode_id) if episode_id is not None else None,
+            seed=seed,
+            episode_id=str(episode_id) if episode_id else None,
         )
-        return observation.model_dump()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        result = observation.model_dump()
+        return JSONResponse(content=result, status_code=200)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+        import traceback
+        return JSONResponse(content={"error": str(e), "traceback": traceback.format_exc()}, status_code=500)
 
 
-@app.post("/step", response_model=StepResponse)
+@app.post("/step")
 async def step(request_obj: Request):
-    """
-    Execute one step in the environment.
-    Accepts JSON body with: task_name, action_type, payload
-    Returns: StepResponse with observation, reward, done, and info
-    """
+    """Step - no validation, pure request handling"""
     try:
-        body = await request_obj.json()
-        if body is None or not isinstance(body, dict):
+        body = {}
+        try:
+            body = await request_obj.json()
+        except:
+            pass
+        
+        if not isinstance(body, dict):
             body = {}
         
         action = WorkplaceAction(
-            task_name=body.get("task_name", ""),
-            action_type=body.get("action_type", ""),
-            payload=body.get("payload", {}),
+            task_name=str(body.get("task_name", "")),
+            action_type=str(body.get("action_type", "")),
+            payload=dict(body.get("payload", {})),
         )
         result = env.step(action)
-        return {
+        response = {
             "observation": result.observation.model_dump(),
             "reward": result.reward,
             "done": result.done,
             "info": result.info,
         }
+        return JSONResponse(content=response, status_code=200)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Step failed: {str(e)}")
+        import traceback
+        return JSONResponse(content={"error": str(e), "traceback": traceback.format_exc()}, status_code=500)
 
 
 @app.get("/state")
